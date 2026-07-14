@@ -4,13 +4,21 @@ import App from './App'
 import './styles/app.css'
 import { createElectronStub } from './lib/electron-stub'
 
-// Bootstrap the Electron API stub when running outside Electron
+// Bootstrap the Freebuff API bridge (Tauri or mock)
 if (!window.freebuff) {
-  window.freebuff = createElectronStub()
+  // createElectronStub is async — it detects Tauri vs browser
+  createElectronStub().then((api) => {
+    window.freebuff = api
+    ReactDOM.createRoot(document.getElementById('root')!).render(
+      <React.StrictMode>
+        <App />
+      </React.StrictMode>,
+    )
+  })
+} else {
+  ReactDOM.createRoot(document.getElementById('root')!).render(
+    <React.StrictMode>
+      <App />
+    </React.StrictMode>,
+  )
 }
-
-ReactDOM.createRoot(document.getElementById('root')!).render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>,
-)
