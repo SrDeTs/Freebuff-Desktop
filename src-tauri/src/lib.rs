@@ -186,18 +186,6 @@ fn default_settings() -> AppSettings {
 }
 
 #[derive(Debug, Deserialize)]
-struct ManicodeSettings {
-    #[serde(default)]
-    ads_enabled: Option<bool>,
-    #[serde(default)]
-    freebuff_model: Option<String>,
-    #[serde(default)]
-    mode: Option<String>,
-    #[serde(default)]
-    has_submitted_first_prompt: Option<bool>,
-}
-
-#[derive(Debug, Deserialize)]
 struct Credentials {
     #[serde(default)]
     default: Option<CredentialUser>,
@@ -209,8 +197,6 @@ struct CredentialUser {
     name: Option<String>,
     #[serde(default)]
     email: Option<String>,
-    #[serde(default)]
-    id: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
