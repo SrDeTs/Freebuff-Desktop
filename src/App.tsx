@@ -113,7 +113,8 @@ export default function App() {
   }, [])
 
   useEffect(() => {
-    return window.freebuff.onSessionAd(({ ad: live }) => {
+    return window.freebuff.onSessionAd((payload: { sessionId: string; ad: { text: string; url?: string } }) => {
+      const live = payload.ad
       setAd({
         id: `live-${Date.now()}`,
         brand: 'Sponsored',
@@ -125,7 +126,8 @@ export default function App() {
   }, [])
 
   useEffect(() => {
-    return window.freebuff.onSessionExit(async ({ sessionId: id }) => {
+    return window.freebuff.onSessionExit(async (payload: { sessionId: string; exitCode: number | null }) => {
+      const id = payload.sessionId
       if (id !== sessionId) return
       setSessionAlive(false)
       const list = await refreshChats()
