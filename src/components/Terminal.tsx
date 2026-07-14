@@ -71,9 +71,9 @@ export default function TerminalView({ sessionId, onReady }: Props) {
     fitRef.current = fit
     onReady?.(term)
 
-    const unsubData = window.freebuff.onSessionData(({ sessionId: id, data }) => {
-      if (id !== sessionId) return
-      term.write(data)
+    const unsubData = window.freebuff.onSessionData((payload: { sessionId: string; data: string }) => {
+      if (payload.sessionId !== sessionId) return
+      term.write(payload.data)
     })
 
     const ro = new ResizeObserver(() => {
