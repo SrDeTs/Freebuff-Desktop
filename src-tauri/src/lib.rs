@@ -1,9 +1,10 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::io::{BufRead, BufReader, Write};
+use std::io::{Read, Write};
 use std::path::PathBuf;
 use std::process::{Child, ChildStdin, Command, Stdio};
 use std::sync::Mutex;
+use tauri::Emitter;
 use tauri::Manager;
 
 // ─── Data Types ────────────────────────────────────────────────────────────
@@ -282,12 +283,6 @@ fn get_bootstrap() -> Result<Bootstrap, String> {
     // Chats
     let chats = list_chat_sessions_internal(&manicode);
 
-    // Get freebuffModel from settings
-    let model_from_settings = fb_settings
-        .get("freebuffModel")
-        .and_then(|v| v.as_str())
-        .map(|s| s.to_string());
-
     let final_settings = AppSettings {
         model: app_settings.model.clone(),
         ads_enabled: fb_settings
@@ -436,8 +431,6 @@ fn get_settings() -> AppSettings {
 
 #[tauri::command]
 fn save_settings(partial: AppSettings) -> AppSettings {
-    let current: AppSettings = read_json(&app_settings_path()).unwrap_or_else(default_settings);
-
     let merged = AppSettings {
         default_cwd: partial.default_cwd,
         model: partial.model.clone(),
@@ -550,16 +543,25 @@ fn start_session(
 
     let stdin = child.stdin.take();
 
-    // Read stdout in a thread, sending data via Tauri events
+    // Read stdout byte-by-byte and emit via events.
+    // When the pipe closes (EOF), emit session:exit.
     let app_handle = app.clone();
     let sid = session_id.clone();
-    if let Some(stdout) = child.stdout.take() {
+    if let Some(mut stdout) = child.stdout.take() {
         std::thread::spawn(move || {
-            let reader = BufReader::new(stdout);
-            for line in reader.lines() {
-                match line {
-                    Ok(l) => {
-                        let data = format!("{}\r\n", l);
+            let mut buf = [0u8; 4096];
+            loop {
+                match stdout.read(&mut buf) {
+                    Ok(0) => {
+                        // EOF — process exited
+                        let _ = app_handle.emit("session:exit", serde_json::json!({
+                            "sessionId": sid,
+                            "exitCode": 0,
+                        }));
+                        break;
+                    }
+                    Ok(n) => {
+                        let data = String::from_utf8_lossy(&buf[..n]).to_string();
                         let _ = app_handle.emit("session:data", serde_json::json!({
                             "sessionId": sid,
                             "data": data,
@@ -571,16 +573,17 @@ fn start_session(
         });
     }
 
-    // Read stderr
+    // Read stderr byte-by-byte
     let app_handle2 = app.clone();
     let sid2 = session_id.clone();
-    if let Some(stderr) = child.stderr.take() {
+    if let Some(mut stderr) = child.stderr.take() {
         std::thread::spawn(move || {
-            let reader = BufReader::new(stderr);
-            for line in reader.lines() {
-                match line {
-                    Ok(l) => {
-                        let data = format!("{}\r\n", l);
+            let mut buf = [0u8; 4096];
+            loop {
+                match stderr.read(&mut buf) {
+                    Ok(0) => break,
+                    Ok(n) => {
+                        let data = String::from_utf8_lossy(&buf[..n]).to_string();
                         let _ = app_handle2.emit("session:data", serde_json::json!({
                             "sessionId": sid2,
                             "data": data,
@@ -589,17 +592,12 @@ fn start_session(
                     Err(_) => break,
                 }
             }
-            // Emit exit event when stderr closes
-            let _ = app_handle2.emit("session:exit", serde_json::json!({
-                "sessionId": sid2,
-                "exitCode": 0,
-            }));
         });
     }
 
     let pid = child.id();
 
-    // Store in session manager
+    // Store child in session manager
     if let Some(state) = app.try_state::<SessionManager>() {
         let mut sessions = state.sessions.lock().unwrap();
         sessions.insert(session_id.clone(), SessionEntry { child, stdin });
